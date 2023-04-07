@@ -4,18 +4,55 @@
 #include <QtNetwork/QLocalServer>
 #include <QFileInfo>
 #include <QLibrary>
+#include<QBuffer>
+
 
 SingleApp::SingleApp(int &argc, char **argv)
-    : QApplication(argc, argv)
-    , bRunning(false)
-    , localServer(NULL)
-    , mainWindow(NULL)
+    : QApplication(argc, argv), m_share("trimatch")
 {
-    // 取应用程序名作为LocalServer的名字
-    serverName = QFileInfo(QCoreApplication::applicationFilePath()).fileName();
-    //qDebug()<<serverName;
-    initLocalConnection();
+    QBuffer buffer;
+    buffer.open(QBuffer::ReadWrite);
+    QDataStream out(&buffer);
+    out << this->wid;
+    int size = buffer.size();
+    if (!m_share.create(size)) {
+        bRunning = true;
+        m_share.lock();
+        memcpy((char*)m_share.data(), buffer.data().data(), size);
+        m_share.unlock();
+
+    }
 }
+
+SingleApp::~SingleApp()
+{
+    m_share.detach();
+}
+
+//#ifdef WIN32
+//SingleApp::SingleApp(int &argc, char **argv)
+//    : QApplication(argc, argv)
+//    , bRunning(false)
+//    , localServer(NULL)
+//    , mainWindow(NULL)
+//{
+//    // 取应用程序名作为LocalServer的名字
+//    serverName = QFileInfo(QCoreApplication::applicationFilePath()).fileName();
+//    //qDebug()<<serverName;
+//    initLocalConnection();
+//}
+//#elif __APPLE__
+//SingleApp::SingleApp(int &argc, char **argv)
+//    : QApplication(argc, argv), m_share("trimatch")
+//{
+//    if (!m_share.create(1)) {
+
+//        bRunning = true;
+
+//    }
+//}
+//#endif
+
 
 
 
@@ -25,6 +62,20 @@ SingleApp::SingleApp(int &argc, char **argv)
 bool SingleApp::isRunning()
 {
     return bRunning;
+}
+
+WId SingleApp::getWid()
+{
+    QBuffer buffer;
+    QDataStream in(&buffer);
+    WId res;
+
+    m_share.lock();
+    buffer.setData((char*)m_share.constData(), m_share.size());
+    buffer.open(QBuffer::ReadOnly);
+    in >> res;
+    m_share.unlock();
+    return res;
 }
 
 

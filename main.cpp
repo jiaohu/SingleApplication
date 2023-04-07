@@ -2,14 +2,15 @@
 #include "mainhanlder.h"
 #include"singleapp.h"
 #include<QDebug>
-#include "windows.h"
+
 #include<QMessageBox>
 #include<QtGui>
 #include<QtGlobal>
 
 MainHanlder* MainHanlder::instance = nullptr;
 QMutex MainHanlder::mutex;
-
+#ifdef WIN32
+#include "windows.h"
 int main(int argc, char *argv[])
 {
     SingleApp a(argc, argv);
@@ -54,3 +55,35 @@ int main(int argc, char *argv[])
 //    qDebug()<<a.data;
 //    return 0;
 }
+#elif __APPLE__
+int main(int argc, char *argv[]) {
+    SingleApp a(argc, argv);
+    MainWindow w;
+    if (a.isRunning()) {
+        qDebug()<<"running";
+        try {
+            WId tmp = a.getWid();
+            qDebug()<<tmp;
+            QWidget *t = QWidget::find(tmp);
+            if (t == nullptr) {
+                QMessageBox::warning(nullptr, "", "1");
+                return -1;
+            }
+            t->show();
+            return 1;
+        }  catch (QException e) {
+            QMessageBox::warning(nullptr, "", e.what());
+            return -1;
+        }
+
+    }
+    a.wid = w.winId();
+    w.show();
+
+    return a.exec();
+}
+#endif
+
+
+
+
