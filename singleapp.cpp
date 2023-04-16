@@ -4,29 +4,45 @@
 #include <QtNetwork/QLocalServer>
 #include <QFileInfo>
 #include <QLibrary>
+#include<random>
 #include<QBuffer>
+#include<QMessageBox>
+#include<qmath.h>
 
 
 SingleApp::SingleApp(int &argc, char **argv)
-    : QApplication(argc, argv), m_share("trimatch")
+    : QApplication(argc, argv), m_share("hello")
 {
-    QBuffer buffer;
-    buffer.open(QBuffer::ReadWrite);
-    QDataStream out(&buffer);
-    out << this->wid;
-    int size = buffer.size();
-    if (!m_share.create(size)) {
-        bRunning = true;
-        m_share.lock();
-        memcpy((char*)m_share.data(), buffer.data().data(), size);
-        m_share.unlock();
 
+    QMessageBox::information(nullptr, "", "construct");
+//    timer.setInterval(EVENT_TIMER_MS);
+//    timer.setSingleShot(true);
+//    connect(&timer, &QTimer::timeout, this, &SingleApp::processEvents);
+
+    // 用来生成随机的globalId
+//    std::default_random_engine randEngine((std::random_device())());
+//    std::uniform_int_distribution<uint64_t> distribution;
+//    globalId = distribution(randEngine);
+    if (m_share.attach()) {
+                bRunning = true;
+        QMessageBox::information(nullptr, "","could not lock to take owner");
+        WId mem = getWid();
+        QMessageBox::information(nullptr, "","getMemory");
+
+        globalId = mem;
+        QMessageBox::information(nullptr, "",QString("globalId = %1").arg(mem));
+    } else {
+        m_share.create(sizeof(Memory));
     }
 }
 
 SingleApp::~SingleApp()
 {
-    m_share.detach();
+    if (!m_share.lock()) {
+        return;
+    }
+
+    m_share.unlock();
 }
 
 //#ifdef WIN32
@@ -68,84 +84,63 @@ WId SingleApp::getWid()
 {
     QBuffer buffer;
     QDataStream in(&buffer);
-    WId res;
-
-    m_share.lock();
-    buffer.setData((char*)m_share.constData(), m_share.size());
+    WId mem;
+    buffer.setData((char*)m_share.data(), m_share.size());
     buffer.open(QBuffer::ReadOnly);
-    in >> res;
-    m_share.unlock();
-    return res;
+    in >> mem;
+
+    return mem;
 }
 
-
-// 说明：
-// 通过socket通讯实现程序单实例运行，监听到新的连接时触发该函数
-
-void SingleApp::newLocalConnection()
+void SingleApp::setWid(WId wid)
 {
-    QLocalSocket *socket = localServer->nextPendingConnection();
-    if (!socket)
-        return;
-    socket->waitForReadyRead(1000);
-    QTextStream stream(socket);
-    //其他处理
-    delete socket;
-    if (mainWindow != NULL)
-    {
-        //激活窗口
-        mainWindow->raise();
-        mainWindow->activateWindow();
-        mainWindow->setWindowState((mainWindow->windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
-        mainWindow->show();
+    if (m_share.lock()) {
+        QBuffer buffer;
+        buffer.open(QBuffer::ReadWrite);
+        QDataStream out(&buffer);
+        out << wid;
+    //            mem->lastProcessed = time(nullptr);
+        memcpy(m_share.data(), buffer.data(), qMin(m_share.size(), int(buffer.size())));
+        m_share.unlock();
     }
 }
 
-
-// 说明：
-// 通过socket通讯实现程序单实例运行，
-// 初始化本地连接，如果连接不上server，则创建，否则退出
-
-void SingleApp::initLocalConnection()
+bool SingleApp::isCurrentOwner()
 {
-    bRunning = false;
-    QLocalSocket socket;
-    socket.connectToServer(serverName);
-    if(socket.waitForConnected(500))
-    {
-        bRunning = true;
-        // 其他处理，如：将启动参数发送到服务端
-        QTextStream stream(&socket);
-        QStringList args = QCoreApplication::arguments();
-        if (args.count() > 1)
-            stream << args.last();
-        else
-            stream << QString();
-        stream.flush();
-        socket.waitForBytesWritten();
-
-        return;
+    if (bRunning) {
+        m_share.lock();
+        return true;
     }
-
-    //连接不上服务器，就创建一个
-    newLocalServer();
+    return false;
 }
 
-
-// 说明：
-// 创建LocalServer
-
-void SingleApp::newLocalServer()
+void SingleApp::setGlobalId(uint64_t t)
 {
-    localServer = new QLocalServer(this);
-    connect(localServer, SIGNAL(newConnection()), this, SLOT(newLocalConnection()));
-    if(!localServer->listen(serverName))
-    {
-        // 此时监听失败，可能是程序崩溃时,残留进程服务导致的,移除之
-        if(localServer->serverError() == QAbstractSocket::AddressInUseError)
-        {
-            QLocalServer::removeServer(serverName); // <-- 重点
-            localServer->listen(serverName); // 再次监听
-        }
-    }
+    globalId = t;
 }
+
+void SingleApp::processEvents()
+{
+//    qDebug()<<"processEvents";
+//    if (!m_share.lock()) {
+//        timer.start();
+//        return;
+//    }
+
+//    Memory *mem = getMemory();
+
+//    if (mem->wid == globalId) {
+//        mem->lastProcessed = time(nullptr);
+//    } else {
+//        if (difftime(time(nullptr), mem->lastProcessed) >= OWNERSHIP_TIMEOUT_S) {
+//            qDebug()<<"previous owner timed out, taking ownership"<<mem->wid<<"->"<<globalId;
+//            memset(mem, 0, sizeof(Memory));
+//            mem->wid = globalId;
+//            mem->lastProcessed = time(nullptr);
+//        }
+//    }
+
+//    m_share.unlock();
+//    timer.start();
+}
+
